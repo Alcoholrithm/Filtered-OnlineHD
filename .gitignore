@@ -3,3 +3,7 @@
 /docs/_autosummary/
 /docs/_build/
 !/examples/data/README.md
+**/hp*/
+verification.ipynb
+cifar10.ipynb
+**/data/

@@ -2,6 +2,7 @@ import math
 from typing import Union
 
 import torch
+import numpy as np
 
 from . import spatial
 from . import Encoder
@@ -44,16 +45,25 @@ class OnlineHD(object):
         >>> ypred.size()
         torch.Size([1000])
     '''
-    def __init__(self, criterias, kernel_size, scaler, classes : int, features : int, dim : int = 4000):
+    def __init__(self, kernel_size, scaler, classes : int, features : int, dim : int = 4000):
         self.classes = classes
         self.dim = dim
         self.encoder = Encoder(features, dim)
         self.model = torch.zeros(self.classes, self.dim)
-        self.criterias = criterias
+        self.criterias = []
         self.kernel_size = kernel_size
         self.scaler = scaler
         self.device = 'cpu'
         self.layer = torch.nn.MaxPool2d(kernel_size = self.kernel_size, stride = 1, padding = self.kernel_size // 2)
+
+    def set_criterias(self, x, bins, is_data = True):
+            if is_data:
+                dist = np.histogram(x, bins)[1]
+                criterias = [[dist[i].item(), dist[i + 1].item(), dist[i].item()] for i in range(len(dist) - 1)]
+                criterias[-1][-1] = criterias[-1][1]
+                self.criterias = criterias
+            else:
+                self.criterias = x
 
     def local_maximum(self, imgs):
         b, h, w, c = imgs.shape

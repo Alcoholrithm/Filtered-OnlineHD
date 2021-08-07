@@ -44,11 +44,33 @@ class OnlineHD(object):
         >>> ypred.size()
         torch.Size([1000])
     '''
-    def __init__(self, classes : int, features : int, dim : int = 4000):
+    def __init__(self, criterias, kernel_size, scaler, classes : int, features : int, dim : int = 4000):
         self.classes = classes
         self.dim = dim
         self.encoder = Encoder(features, dim)
         self.model = torch.zeros(self.classes, self.dim)
+        self.criterias = criterias
+        self.kernel_size = kernel_size
+        self.scaler = scaler
+        self.device = 'cpu'
+        self.layer = torch.nn.MaxPool2d(kernel_size = self.kernel_size, stride = 1, padding = self.kernel_size // 2)
+
+    def local_maximum(self, imgs):
+        b, h, w, c = imgs.shape
+        outs = imgs.clone().detach().permute((0, 3, 1, 2))
+        outs = self.layer(outs).permute((0, 2, 3, 1))
+        #outs = imgs.clone().detach().reshape((b, c, h, w))
+        #outs = self.layer(outs).reshape(b, h, w, c)
+        return outs
+
+    def quantizing(self, imgs):
+        outs = imgs.clone().detach()
+        for c in self.criterias:
+            outs[(outs >= c[0]) & (outs < c[1])] = c[2]
+    
+        return outs  
+    
+    
 
     def __call__(self, x : torch.Tensor, encoded : bool = False):
         '''
@@ -116,8 +138,18 @@ class OnlineHD(object):
         See Also:
             :func:`spatial.cos_cdist` for details.
         '''
+        x = x.to(*self.device)
+        if not encoded:
+            x = self.local_maximum(x)
+            x = self.quantizing(x)
+            x = x.reshape((x.shape[0], -1))
+            x = x.to('cpu')
+            x = self.scaler.transform(x)
+            x = torch.from_numpy(x).float().to(*self.device)
+            h = self.encode(x)
+        else:
+            h = x
 
-        h = x if encoded else self.encode(x)
         return spatial.cos_cdist(h, self.model)
 
     def encode(self, x : torch.Tensor):
@@ -177,8 +209,20 @@ class OnlineHD(object):
         Returns:
             :class:`OnlineHD`: self
         '''
+        x = x.to(*self.device)
+        if encoded:
+            h = x
+        else:
+            x = self.local_maximum(x)
+            x = self.quantizing(x)
+            x = x.reshape((x.shape[0], -1))
+            x = x.to('cpu')
+            self.scaler.fit(x)
+            x = self.scaler.transform(x)
+            x = torch.from_numpy(x).float().to(*self.device)
+            h = self.encode(x)
 
-        h = x if encoded else self.encode(x)
+        y = y.to(*self.device)
         if one_pass_fit:
             self._one_pass_fit(h, y, lr, bootstrap)
         self._iterative_fit(h, y, lr, epochs, batch_size)
@@ -201,6 +245,7 @@ class OnlineHD(object):
 
         self.model = self.model.to(*args)
         self.encoder = self.encoder.to(*args)
+        self.device = args
         return self
 
     def _one_pass_fit(self, h, y, lr, bootstrap):

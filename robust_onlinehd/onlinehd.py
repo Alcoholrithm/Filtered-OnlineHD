@@ -45,7 +45,12 @@ class OnlineHD(object):
         >>> ypred.size()
         torch.Size([1000])
     '''
-    def __init__(self, kernel_size, scaler, classes : int, features : int, dim : int = 4000):
+
+    def __init__(self, kernel_size = 1, scaler = None, classes : int = 10, features : int = 784, dim : int = 4000, path = None):
+        if path != None:
+            self.load_model(path)
+            return
+
         self.classes = classes
         self.dim = dim
         self.encoder = Encoder(features, dim)
@@ -56,21 +61,24 @@ class OnlineHD(object):
         self.device = 'cpu'
         self.layer = torch.nn.MaxPool2d(kernel_size = self.kernel_size, stride = 1, padding = self.kernel_size // 2)
 
-    def set_criterias(self, x, bins, is_data = True):
+    def get_criteria_from_data(self, x, bins):
+        dist = np.histogram(x, bins)[1]
+        criterias = [[dist[i].item(), dist[i + 1].item(), dist[i].item()] for i in range(len(dist) - 1)]
+        criterias[-1][-1] = criterias[-1][1]
+        return criterias
+
+    def set_criterias(self, x, bins = None, is_data = True):
             if is_data:
-                dist = np.histogram(x, bins)[1]
-                criterias = [[dist[i].item(), dist[i + 1].item(), dist[i].item()] for i in range(len(dist) - 1)]
-                criterias[-1][-1] = criterias[-1][1]
-                self.criterias = criterias
+                self.criterias = self.get_criteria_from_data(x, bins)
             else:
                 self.criterias = x
 
     def local_maximum(self, imgs):
-        b, h, w, c = imgs.shape
+        if self.kernel_size == 1:
+            return imgs
+            
         outs = imgs.clone().detach().permute((0, 3, 1, 2))
         outs = self.layer(outs).permute((0, 2, 3, 1))
-        #outs = imgs.clone().detach().reshape((b, c, h, w))
-        #outs = self.layer(outs).reshape(b, h, w, c)
         return outs
 
     def quantizing(self, imgs):
@@ -79,6 +87,19 @@ class OnlineHD(object):
             outs[(outs >= c[0]) & (outs < c[1])] = c[2]
     
         return outs  
+    
+    def load_model(self, path):
+        temp = torch.load(path)['model']
+
+        self.classes = temp.classes
+        self.dim = temp.dim
+        self.encoder = temp.encoder
+        self.model = temp.model
+        self.criterias = temp.criterias
+        self.kernel_size = temp.kernel_size
+        self.scaler = temp.scaler
+        self.device = temp.device
+        self.layer = temp.layer
     
     
 

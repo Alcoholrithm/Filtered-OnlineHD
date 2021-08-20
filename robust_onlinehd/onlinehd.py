@@ -46,20 +46,24 @@ class OnlineHD(object):
         torch.Size([1000])
     '''
 
-    def __init__(self, kernel_size = 1, scaler = None, classes : int = 10, features : int = 784, dim : int = 4000, path = None):
+    def __init__(self, do_maxpool = False, img_shape = (28, 28, 1), kernel_size = 1, scaler = None, classes : int = 10, dim : int = 4000, path = None):
         if path != None:
             self.load_model(path)
             return
 
         self.classes = classes
         self.dim = dim
-        self.encoder = Encoder(features, dim)
         self.model = torch.zeros(self.classes, self.dim)
         self.criterias = []
         self.kernel_size = kernel_size
         self.scaler = scaler
         self.device = 'cpu'
-        self.layer = torch.nn.MaxPool2d(kernel_size = self.kernel_size, stride = 1, padding = self.kernel_size // 2)
+        if do_maxpool == False:
+            self.encoder = Encoder(img_shape[0] * img_shape[1] * img_shape[2], dim)
+            self.layer = torch.nn.MaxPool2d(kernel_size = self.kernel_size, stride = 1, padding = self.kernel_size // 2)
+        else:
+            self.encoder = Encoder(img_shape[0] // self.kernel_size * img_shape[1] // self.kernel_size * img_shape[2], dim)
+            self.layer = torch.nn.MaxPool2d(kernel_size = self.kernel_size)
 
     def get_criteria_from_data(self, x, bins):
         dist = np.histogram(x, bins)[1]
@@ -76,7 +80,6 @@ class OnlineHD(object):
     def local_maximum(self, imgs):
         if self.kernel_size == 1:
             return imgs
-            
         outs = imgs.clone().detach().permute((0, 3, 1, 2))
         outs = self.layer(outs).permute((0, 2, 3, 1))
         return outs
@@ -85,7 +88,6 @@ class OnlineHD(object):
         outs = imgs.clone().detach()
         for c in self.criterias:
             outs[(outs >= c[0]) & (outs < c[1])] = c[2]
-    
         return outs  
     
     def load_model(self, path):
@@ -247,13 +249,14 @@ class OnlineHD(object):
             x = self.local_maximum(x)
             x = self.quantizing(x)
             x = x.reshape((x.shape[0], -1))
-            x = x.to('cpu')
+            x = x.cpu().numpy()
             self.scaler.fit(x)
             x = self.scaler.transform(x)
             x = torch.from_numpy(x).float().to(*self.device)
             h = self.encode(x)
 
         y = y.to(*self.device)
+
         if one_pass_fit:
             self._one_pass_fit(h, y, lr, bootstrap)
         self._iterative_fit(h, y, lr, epochs, batch_size)
@@ -307,6 +310,7 @@ class OnlineHD(object):
 
         # will execute one pass learning with data not used during model
         # bootstrap
+        
         h_ = h[todo]
         y_ = y[todo]
         _fasthd.onepass(h_, y_, self.model, lr)

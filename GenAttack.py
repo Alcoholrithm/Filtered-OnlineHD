@@ -5,14 +5,12 @@ from tqdm import tqdm
 import numpy as np
 
 class GenAttack(object):
-    def __init__(self, model, num_labels, img_size, scaler, threshold = 0.95, device = 'cuda'):
+    def __init__(self, model, num_labels, threshold = 0.95, device = 'cuda'):
         self.model = model.to(device)
         self.device = device
 
         self.num_labels = num_labels
         self.tlab = None
-        self.img_size = img_size
-        self.scaler = scaler
         self.threshold = threshold
 
     def set_tlab(self, target):

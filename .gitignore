@@ -8,3 +8,8 @@ verification.ipynb
 cifar10.ipynb
 **/data/
 *.pt
+*efficency.ipynb
+*model.ipynb
+*.log
+*.pickle
+/ssimm/
